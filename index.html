@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電腦零件菜單</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-/bQdsTh/da6pkI1MST/rWKFNjaCP5gBSY4sEBT38Q/9RBh9AH40zEOg7Hlq2THRZ" crossorigin="anonymous"></script>
+    <style>
+        input{
+            width: 100%;
+            outline: none;
+            border: 0;
+            background-color: transparent;
+            height: 3rem;
+            text-align: center;
+            
+        }
+
+        td{
+            vertical-align: middle;
+        }
+        #save-block::after{
+            content: '';
+            display: block;
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <div id="edit-panel" class="container">
+        <div style="margin-top: 2rem;">
+            <input type="file" id="file" style="display: none;"/>
+            <button id="import" type="button" class="btn btn-primary">匯入檔案</button>
+        </div>
+        
+        <div id="save-block" >
+            <button id="save" class="btn btn-success" style="float:right">儲存</button>
+        </div>
+        <div class="table-responsive" style="margin-top: 2rem;">
+            <table class="table table-bordered table-hover">
+                <thead>
+                    <tr >
+                        <th scope="col" class="col-sm-9 text-center">品名</th>
+                        <th scope="col" class="col-sm-1 text-center">單價</th>
+                        <th scope="col" class="col-sm-1 text-center">數量</th>
+                        <th scope="col" class="col-sm-1 text-center">小計</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="">
+                        <td scope="row">
+                            <input type="text">
+                        </td>
+                        <td><input id="price" type="text" numcheck="true"></td>
+                        <td><input id="amount" type="text" numcheck="true"></td>
+                        <td><input id="sum" type="text" numcheck="true" disabled></td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="text-end"><span>總計</span></td>
+                        <td colspan="1"><input id="total" type="text"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div>
+            <button id="add" class="btn btn-warning">+</button>
+        </div>
+
+    </div>
+    
+    <script type="module">
+        import * as tableFunc from './script/table_operator.js';
+        document.addEventListener('DOMContentLoaded', () => {
+            tableFunc.addTrClass();
+            tableFunc.addCellClass();
+            registEvent();
+            let btnAdd = document.querySelector('#add');
+            btnAdd.addEventListener('click', tableFunc.addRow);
+
+            let upload = document.querySelector('[type=file]');
+            upload.addEventListener('change', (event)=>{
+                handleFiles(event.currentTarget.files);
+            });
+            let btnSave = document.querySelector('#save');
+            btnSave.addEventListener('click', () => {
+                let table = document.querySelector('#edit-panel table');
+                let data = [];
+                for(let i = 1; i < table.rows.length-1; i++){
+                    let row = table.rows[i];
+                    let inputs = [...row.querySelectorAll('input')];
+                    let cells = Object.create(null);
+                    for(let j = 0; j < inputs.length; j++){
+                        cells[j] = inputs[j].value;
+                    }
+                    data.push(cells);
+                    
+                }
+                let jsonData = JSON.stringify(data, null, 2);
+                let blob = new Blob([jsonData],
+                {type: "application/json"});
+                let url = URL.createObjectURL(blob);
+                let anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = "電腦菜單.json";
+                let event = document.createEvent('MouseEvents');
+                event.initMouseEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+                anchor.dispatchEvent(event);
+                URL.revokeObjectURL(url);
+            });
+            let btnImport = document.querySelector('#import');
+            
+            btnImport.addEventListener('click', () =>{
+                upload.click();
+            });
+        });
+
+        function handleFiles(files) {
+            if (files.length) {
+                var file = files[0];
+                var reader = new FileReader();
+                console.log(file.type);
+                //FileReader讀檔之後會觸發
+                reader.onload = function() {
+                    // let pre = document.createElement('pre');
+                    // pre.innerHTML = this.result;
+                    // document.body.appendChild(pre);
+
+                    let result = JSON.parse(this.result);
+                    // console.log(result);
+                    tableFunc.clearAllRows();
+                    result.forEach(()=>{
+                        tableFunc.addRow();
+                    });
+                    let table = document.querySelector('#edit-panel table');
+                    for(let i = 1; i < table.rows.length; i++){
+                        let rowData = result[i - 1];
+                        let txts = [...table.rows[i].querySelectorAll('input')];
+                        for(let key in rowData){
+                            txts[key].value = rowData[key];
+                        }
+                    }
+                    calcTotal();
+                }
+                reader.readAsText(file);
+                
+            }
+        }
+        function registEvent(){
+            let txtNums = document.querySelectorAll('[numcheck=true]');
+            txtNums.forEach(txt=>{
+                txt.addEventListener('input', checkNum);
+            });
+            document.querySelectorAll('#amount,#price').forEach(txt=>{
+                txt.addEventListener('blur', sumPrice);
+            });
+        }
+        function checkNum() {
+            let txtValue = this.value;
+            let regex = /\D+/g
+            this.value = txtValue.replace(regex, '');
+        }
+        function sumPrice(){
+            let row = this.closest('tr');
+            let amount = row.querySelector('#amount');
+            let price = row.querySelector('#price');
+            let sum = row.querySelector('#sum');
+            let sumProxy = sumProxyFactory(sum);
+            if (price.value.trim() && amount.value.trim()){
+                sumProxy.value = parseInt(amount.value) * parseInt(price.value);
+            }
+        }
+        function sumProxyFactory(txtSum){
+            let proxy = new Proxy(txtSum, {
+                get(obj, prop){
+                    return obj[prop];
+                },
+                set(obj, prop, value){
+                    obj[prop] = value;
+                    calcTotal();
+                    return true;
+                }
+            });
+            return proxy;
+        }
+        function calcTotal(){
+            let sums = document.querySelectorAll('#sum');
+            let total = document.querySelector('#total');
+            let iTotal = 0;
+            sums.forEach(s=>{
+                if(s.value.trim()){
+                    iTotal += parseInt(s.value);
+                }
+            });
+            total.value = iTotal;
+        }
+
+    </script>
+</body>
+</html>
